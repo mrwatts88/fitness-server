@@ -1,15 +1,49 @@
+use std::sync::{Arc, Mutex};
+
 use axum::{Router, routing::get};
-use fitness_server::routes::{calories, tdee, weight};
+use fitness_server::{
+    Db,
+    routes::{calories, tdee, weight},
+};
+use rusqlite::Connection;
 
 #[tokio::main]
 async fn main() {
+    let path = "./db.db3";
+    let conn = Connection::open(path).unwrap();
+
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS calorieentries (id INTEGER PRIMARY KEY, amount INTEGER)",
+        (), // empty list of parameters.
+    )
+    .unwrap();
+
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS weightentries (id INTEGER PRIMARY KEY, amount INTEGER)",
+        (), // empty list of parameters.
+    )
+    .unwrap();
+
+    let arccon: Db = Arc::new(Mutex::new(conn));
+
     let app = Router::new()
         .route("/", get("healthy"))
-        .route("/calories", get(calories::list))
-        .route("/weight", get(weight::list))
-        .route("/tdee", get(tdee::get));
+        .route(
+            "/calories",
+            get(calories::list)
+                .post(calories::create)
+                .delete(calories::delete),
+        )
+        .route(
+            "/weight",
+            get(weight::list)
+                .post(weight::create)
+                .delete(weight::delete),
+        )
+        .route("/tdee", get(tdee::get))
+        .with_state(arccon);
+
     let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await.unwrap();
     println!("listening on {}", listener.local_addr().unwrap());
-
     axum::serve(listener, app).await.unwrap();
 }
