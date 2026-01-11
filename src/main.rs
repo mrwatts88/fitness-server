@@ -1,6 +1,12 @@
-use std::sync::{Arc, Mutex};
+use std::{
+    collections::HashMap,
+    sync::{Arc, Mutex},
+};
 
-use axum::{Router, routing::get};
+use axum::{
+    Json, Router,
+    routing::{delete, get},
+};
 use fitness_server::{
     Db,
     routes::{calories, tdee, weight},
@@ -13,33 +19,31 @@ async fn main() {
     let conn = Connection::open(path).unwrap();
 
     conn.execute(
-        "CREATE TABLE IF NOT EXISTS calorieentries (id INTEGER PRIMARY KEY, amount INTEGER)",
-        (), // empty list of parameters.
+        "CREATE TABLE IF NOT EXISTS calorieentries (
+                id INTEGER PRIMARY KEY,
+                amount INTEGER NOT NULL,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)",
+        (),
     )
     .unwrap();
 
     conn.execute(
-        "CREATE TABLE IF NOT EXISTS weightentries (id INTEGER PRIMARY KEY, amount INTEGER)",
-        (), // empty list of parameters.
+        "CREATE TABLE IF NOT EXISTS weightentries (
+                id INTEGER PRIMARY KEY,
+                amount INTEGER NOT NULL,
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)",
+        (),
     )
     .unwrap();
 
     let arccon: Db = Arc::new(Mutex::new(conn));
 
     let app = Router::new()
-        .route("/", get("healthy"))
-        .route(
-            "/calories",
-            get(calories::list)
-                .post(calories::create)
-                .delete(calories::delete),
-        )
-        .route(
-            "/weight",
-            get(weight::list)
-                .post(weight::create)
-                .delete(weight::delete),
-        )
+        .route("/health", get(Json(HashMap::from([("status", "healthy")]))))
+        .route("/calories", get(calories::list).post(calories::create))
+        .route("/calories/{id}", delete(calories::delete))
+        .route("/weight", get(weight::list).post(weight::create))
+        .route("/weight/{id}", delete(weight::delete))
         .route("/tdee", get(tdee::get))
         .with_state(arccon);
 
