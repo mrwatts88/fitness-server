@@ -6,7 +6,7 @@ pub mod calories {
         extract::{Path, State},
         response::IntoResponse,
     };
-    use chrono::{Days, prelude::*};
+    use chrono::prelude::*;
     use serde::{Deserialize, Serialize};
 
     #[derive(Debug, Deserialize)]
@@ -37,12 +37,13 @@ pub mod calories {
             .unwrap();
 
         let now_local = Local::now();
-        let start_of_today = now_local.with_time(NaiveTime::from_hms_opt(0, 0, 0).unwrap());
-        let utc = start_of_today.unwrap().to_utc();
-        let formatted_utc = format!("{}", utc.format("%Y-%m-%d %H:%M:%S"));
+        let start_of_today = now_local
+            .with_time(NaiveTime::from_hms_opt(0, 0, 0).unwrap())
+            .unwrap();
+        let formatted = format!("{}", start_of_today.format("%Y-%m-%d %H:%M:%S"));
 
         let results = stmt
-            .query_map(&[(":yesterday", &formatted_utc)], |row| {
+            .query_map(&[(":yesterday", &formatted)], |row| {
                 Ok(CalorieEntry {
                     id: row.get(0).unwrap(),
                     amount: row.get(1).unwrap(),
@@ -63,9 +64,11 @@ pub mod calories {
     ) -> impl IntoResponse {
         let conn = db.lock().unwrap();
 
+        let now_local = Local::now();
+        let formatted = format!("{}", now_local.format("%Y-%m-%d %H:%M:%S"));
         conn.execute(
-            "INSERT INTO calorieentries (amount) VALUES (?1)",
-            [input.amount],
+            "INSERT INTO calorieentries (amount, created_at) VALUES (?1, ?2)",
+            (input.amount, &formatted),
         )
         .unwrap();
     }
@@ -85,6 +88,7 @@ pub mod weight {
         extract::{Path, State},
         response::IntoResponse,
     };
+    use chrono::Local;
     use serde::{Deserialize, Serialize};
 
     use crate::Db;
@@ -98,7 +102,6 @@ pub mod weight {
     #[derive(Debug, Serialize)]
     #[serde(rename_all = "camelCase")]
     struct WeightEntry {
-        id: u32,
         amount: f64,
         created_at: String,
     }
@@ -112,15 +115,16 @@ pub mod weight {
         let conn = db.lock().unwrap();
 
         let mut stmt = conn
-            .prepare("SELECT id, amount, created_at FROM weightentries ORDER BY created_at DESC LIMIT 90")
+            .prepare(
+                "SELECT amount, created_at FROM weightentries ORDER BY created_at DESC LIMIT 90",
+            )
             .unwrap();
 
         let results = stmt
             .query_map([], |row| {
                 Ok(WeightEntry {
-                    id: row.get(0).unwrap(),
-                    amount: row.get(1).unwrap(),
-                    created_at: row.get(2).unwrap(),
+                    amount: row.get(0).unwrap(),
+                    created_at: row.get(1).unwrap(),
                 })
             })
             .unwrap();
@@ -137,18 +141,20 @@ pub mod weight {
     ) -> impl IntoResponse {
         let conn = db.lock().unwrap();
 
+        let now_local = Local::now();
+        let formatted = format!("{}", now_local.format("%Y-%m-%d"));
         conn.execute(
-            "INSERT INTO weightentries (amount) VALUES (?1)",
-            [input.amount],
+            "INSERT OR REPLACE INTO weightentries (amount, created_at) VALUES (?1, ?2)",
+            (input.amount, &formatted),
         )
         .unwrap();
     }
 
     #[axum::debug_handler]
-    pub async fn delete(State(db): State<Db>, Path(id): Path<i32>) -> impl IntoResponse {
+    pub async fn delete(State(db): State<Db>, Path(date): Path<String>) -> impl IntoResponse {
         let conn = db.lock().unwrap();
 
-        conn.execute("DELETE FROM weightentries WHERE id = ?1", [id])
+        conn.execute("DELETE FROM weightentries WHERE created_at = ?1", [date])
             .unwrap();
     }
 }

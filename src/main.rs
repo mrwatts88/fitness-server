@@ -22,16 +22,15 @@ async fn main() {
         "CREATE TABLE IF NOT EXISTS calorieentries (
                 id INTEGER PRIMARY KEY,
                 amount INTEGER NOT NULL,
-                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)",
+                created_at TEXT NOT NULL)", // YYYY-mm-dd HH:MM:SS, local time
         (),
     )
     .unwrap();
 
     conn.execute(
         "CREATE TABLE IF NOT EXISTS weightentries (
-                id INTEGER PRIMARY KEY,
                 amount INTEGER NOT NULL,
-                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP)",
+                created_at TEXT PRIMARY KEY)", // YYYY-mm-dd HH:MM:SS, local time
         (),
     )
     .unwrap();
