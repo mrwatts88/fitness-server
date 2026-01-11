@@ -1,26 +1,17 @@
 pub mod calories {
-    use crate::Db;
-
+    use crate::{Db, dal::calories::CalorieEntry};
     use axum::{
         Json,
         extract::{Path, State},
         response::IntoResponse,
     };
     use chrono::prelude::*;
-    use serde::{Deserialize, Serialize};
+    use serde::Deserialize;
 
     #[derive(Debug, Deserialize)]
     #[serde(rename_all = "camelCase")]
     pub struct CreateCalorieEntryRequest {
         amount: u32,
-    }
-
-    #[derive(Debug, Serialize)]
-    #[serde(rename_all = "camelCase")]
-    struct CalorieEntry {
-        id: u32,
-        amount: u32,
-        created_at: String,
     }
 
     /**
@@ -89,21 +80,14 @@ pub mod weight {
         response::IntoResponse,
     };
     use chrono::Local;
-    use serde::{Deserialize, Serialize};
+    use serde::Deserialize;
 
-    use crate::Db;
+    use crate::{Db, dal::weight::WeightEntry};
 
     #[derive(Debug, Deserialize)]
     #[serde(rename_all = "camelCase")]
     pub struct CreateWeightEntryRequest {
         amount: f64,
-    }
-
-    #[derive(Debug, Serialize)]
-    #[serde(rename_all = "camelCase")]
-    struct WeightEntry {
-        amount: f64,
-        created_at: String,
     }
 
     /**
@@ -160,7 +144,9 @@ pub mod weight {
 }
 
 pub mod tdee {
-    use axum::{Json, response::IntoResponse};
+    use crate::{Db, dal::calories, dal::weight};
+    use axum::{Json, extract::State, response::IntoResponse};
+    use chrono::{Days, Local};
     use serde::Serialize;
 
     #[derive(Debug, Serialize)]
@@ -169,8 +155,72 @@ pub mod tdee {
         amount: u32,
     }
     #[axum::debug_handler]
-    pub async fn get() -> impl IntoResponse {
-        Json(Tdee { amount: 2750 })
-        // todo: implement
+    pub async fn get(state: State<Db>) -> impl IntoResponse {
+        let today = Local::now();
+        let today_minus_1_days = today.checked_sub_days(Days::new(1)).unwrap();
+        let today_minus_13_days = today.checked_sub_days(Days::new(13)).unwrap();
+        let today_minus_14_days = today.checked_sub_days(Days::new(14)).unwrap();
+        let today_minus_27_days = today.checked_sub_days(Days::new(27)).unwrap();
+        let today_minus_28_days = today.checked_sub_days(Days::new(28)).unwrap();
+
+        // 1. get [T-28, T-1] records for calorieentries, 28 days of calories in many entries, C
+        let c_entries = calories::get_by_date_range(
+            state.clone(),
+            &format!("{}", today_minus_28_days.format("%Y-%m-%d")),
+            &format!("{}", today_minus_1_days.format("%Y-%m-%d")),
+        );
+
+        let c_sum: u32 = c_entries.iter().map(|e| e.amount).sum();
+        let food_cals_burned = c_sum / 2;
+        println!("c_sum: {c_sum}");
+        println!("food_cals_burned: {food_cals_burned}");
+
+        // 2. get [T-13, T-0] records for weightentries, 14 days of weights, W2
+        let w2_entries = weight::get_by_date_range(
+            state.clone(),
+            &format!("{}", today_minus_13_days.format("%Y-%m-%d")),
+            &format!("{}", today.format("%Y-%m-%d")),
+        );
+
+        // 3. get [T-27, T-14] records for weightentries, 14 days of weights, W1
+        let w1_entries = weight::get_by_date_range(
+            state.clone(),
+            &format!("{}", today_minus_27_days.format("%Y-%m-%d")),
+            &format!("{}", today_minus_14_days.format("%Y-%m-%d")),
+        );
+
+        // 5. avg(W2) = avg weight over last 14 days, AW2
+        let w2_sum: f64 = w2_entries.iter().map(|e| e.amount).sum();
+        let w2_avg = w2_sum / w2_entries.len() as f64;
+
+        println!("w2_sum: {w2_sum}");
+        println!("w2_avg: {w2_avg}");
+
+        // 6. avg(W1) = avg weight over prior 14 days, AW1
+        let w1_sum: f64 = w1_entries.iter().map(|e| e.amount).sum();
+        let w1_avg = w1_sum / w1_entries.len() as f64;
+
+        println!("w1_sum: {w1_sum}");
+        println!("w1_avg: {w1_avg}");
+
+        // 7. AW1 - AW2 = WLoss, loss in pounds in 2 weeks
+        let loss = w1_avg - w2_avg;
+
+        println!("loss: {loss}");
+
+        // 8. WLoss * 3500 = FatCalsBurned in 2 weeks
+        let fat_cals_burned = loss * 3500.0;
+
+        println!("fat_cals_burned: {food_cals_burned}");
+
+        // 9. FoodCalsBurned + FatCalsBurned = TotalCalsBurned in 2 weeks
+        let total_cals_burned = food_cals_burned + (fat_cals_burned as u32);
+
+        println!("total_cals_burned: {total_cals_burned}");
+
+        // 10. TotalCalsBurned / 14 = TDEE
+        Json(Tdee {
+            amount: total_cals_burned / 14,
+        })
     }
 }
