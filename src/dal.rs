@@ -43,7 +43,7 @@ pub mod calories {
     #[serde(rename_all = "camelCase")]
     pub struct CalorieEntry {
         pub id: u32,
-        pub amount: u32,
+        pub amount: i32,
         pub created_at: String,
     }
 

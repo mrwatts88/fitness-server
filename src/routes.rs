@@ -152,7 +152,7 @@ pub mod tdee {
     #[derive(Debug, Serialize)]
     #[serde(rename_all = "camelCase")]
     struct Tdee {
-        amount: u32,
+        amount: i32,
     }
     #[axum::debug_handler]
     pub async fn get(state: State<Db>) -> impl IntoResponse {
@@ -170,7 +170,7 @@ pub mod tdee {
             &format!("{}", today_minus_1_days.format("%Y-%m-%d")),
         );
 
-        let c_sum: u32 = c_entries.iter().map(|e| e.amount).sum();
+        let c_sum: i32 = c_entries.iter().map(|e| e.amount).sum();
         let food_cals_burned = c_sum / 2;
         println!("c_sum: {c_sum}");
         println!("food_cals_burned: {food_cals_burned}");
@@ -211,10 +211,10 @@ pub mod tdee {
         // 8. WLoss * 3500 = FatCalsBurned in 2 weeks
         let fat_cals_burned = loss * 3500.0;
 
-        println!("fat_cals_burned: {food_cals_burned}");
+        println!("fat_cals_burned: {fat_cals_burned}");
 
         // 9. FoodCalsBurned + FatCalsBurned = TotalCalsBurned in 2 weeks
-        let total_cals_burned = food_cals_burned + (fat_cals_burned as u32);
+        let total_cals_burned = food_cals_burned + (fat_cals_burned as i32);
 
         println!("total_cals_burned: {total_cals_burned}");
 
@@ -222,5 +222,16 @@ pub mod tdee {
         Json(Tdee {
             amount: total_cals_burned / 14,
         })
+    }
+}
+
+pub mod admin {
+    use axum::{extract::State, response::IntoResponse};
+
+    use crate::{Db, seed as sd};
+
+    #[axum::debug_handler]
+    pub async fn seed(state: State<Db>) -> impl IntoResponse {
+        sd(state);
     }
 }

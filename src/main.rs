@@ -9,9 +9,10 @@ use axum::{
 };
 use fitness_server::{
     Db,
-    routes::{calories, tdee, weight},
+    routes::{admin, calories, tdee, weight},
 };
 use rusqlite::Connection;
+use tower_http::cors::{Any, CorsLayer};
 
 #[tokio::main]
 async fn main() {
@@ -22,7 +23,9 @@ async fn main() {
         "CREATE TABLE IF NOT EXISTS calorieentries (
                 id INTEGER PRIMARY KEY,
                 amount INTEGER NOT NULL,
-                created_at TEXT NOT NULL)", // YYYY-mm-dd HH:MM:SS, local time
+                created_at TEXT NOT NULL UNIQUE)", // YYYY-mm-dd HH:MM:SS, local time
+        // created_at is unique because in practice this will never occur,
+        // but during seeding I don't want to duplicate calorie entries so I use insert or replace
         (),
     )
     .unwrap();
@@ -36,6 +39,10 @@ async fn main() {
     .unwrap();
 
     let arccon: Db = Arc::new(Mutex::new(conn));
+    let cors_layer = CorsLayer::new()
+        .allow_methods(Any)
+        .allow_origin(Any)
+        .allow_headers(Any);
 
     let app = Router::new()
         .route("/health", get(Json(HashMap::from([("status", "healthy")]))))
@@ -44,6 +51,8 @@ async fn main() {
         .route("/weight", get(weight::list).post(weight::create))
         .route("/weight/{id}", delete(weight::delete))
         .route("/tdee", get(tdee::get))
+        .route("/seed", get(admin::seed))
+        .layer(cors_layer)
         .with_state(arccon);
 
     let listener = tokio::net::TcpListener::bind("0.0.0.0:3000").await.unwrap();
