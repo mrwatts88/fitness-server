@@ -146,17 +146,21 @@ pub mod weight {
 pub mod tdee {
     use crate::{Db, dal::calories, dal::weight};
     use axum::{Json, extract::State, response::IntoResponse};
-    use chrono::{Days, Local};
+    use chrono::{Days, Local, NaiveTime};
     use serde::Serialize;
 
     #[derive(Debug, Serialize)]
     #[serde(rename_all = "camelCase")]
     struct Tdee {
         amount: i32,
+        loss_in_2_weeks: f64,
     }
     #[axum::debug_handler]
     pub async fn get(state: State<Db>) -> impl IntoResponse {
-        let today = Local::now();
+        let today = Local::now()
+            .with_time(NaiveTime::from_hms_opt(23, 59, 59).unwrap())
+            .unwrap();
+
         let today_minus_1_days = today.checked_sub_days(Days::new(1)).unwrap();
         let today_minus_13_days = today.checked_sub_days(Days::new(13)).unwrap();
         let today_minus_14_days = today.checked_sub_days(Days::new(14)).unwrap();
@@ -167,7 +171,7 @@ pub mod tdee {
         let c_entries = calories::get_by_date_range(
             state.clone(),
             &format!("{}", today_minus_28_days.format("%Y-%m-%d")),
-            &format!("{}", today_minus_1_days.format("%Y-%m-%d")),
+            &format!("{}", today_minus_1_days.format("%Y-%m-%d %H:%M:%S")),
         );
 
         let c_sum: i32 = c_entries.iter().map(|e| e.amount).sum();
@@ -221,6 +225,7 @@ pub mod tdee {
         // 10. TotalCalsBurned / 14 = TDEE
         Json(Tdee {
             amount: total_cals_burned / 14,
+            loss_in_2_weeks: loss,
         })
     }
 }
