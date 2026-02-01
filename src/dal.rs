@@ -71,3 +71,22 @@ pub mod calories {
         iter.collect::<Vec<CalorieEntry>>()
     }
 }
+
+pub mod quickadd {
+    use serde::{Deserialize, Serialize};
+
+    #[derive(Debug, Serialize, Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    pub struct QuickAddFood {
+        pub id: i64,
+        pub name: String,
+        pub unit: String,
+        pub amount: f64,
+        pub calories: i32,
+        pub fat_grams: f64,
+        pub carbs_grams: f64,
+        pub protein_grams: f64,
+        pub sugar_grams: f64,
+        pub created_at: String,
+    }
+}

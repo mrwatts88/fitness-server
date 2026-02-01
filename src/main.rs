@@ -5,11 +5,11 @@ use std::{
 
 use axum::{
     Json, Router,
-    routing::{delete, get},
+    routing::{delete, get, put},
 };
 use fitness_server::{
     Db,
-    routes::{admin, calories, tdee, weight},
+    routes::{admin, calories, quickadd, tdee, weight},
 };
 use rusqlite::Connection;
 use tower_http::cors::{Any, CorsLayer};
@@ -23,9 +23,7 @@ async fn main() {
         "CREATE TABLE IF NOT EXISTS calorieentries (
                 id INTEGER PRIMARY KEY,
                 amount INTEGER NOT NULL,
-                created_at TEXT NOT NULL UNIQUE)", // YYYY-mm-dd HH:MM:SS, local time
-        // created_at is unique because in practice this will never occur,
-        // but during seeding I don't want to duplicate calorie entries so I use insert or replace
+                created_at TEXT NOT NULL)", // YYYY-mm-dd HH:MM:SS, local time
         (),
     )
     .unwrap();
@@ -34,6 +32,22 @@ async fn main() {
         "CREATE TABLE IF NOT EXISTS weightentries (
                 amount INTEGER NOT NULL,
                 created_at TEXT PRIMARY KEY)", // YYYY-mm-dd HH:MM:SS, local time
+        (),
+    )
+    .unwrap();
+
+    conn.execute(
+        "CREATE TABLE IF NOT EXISTS quickaddfoods (
+                id INTEGER PRIMARY KEY,
+                name TEXT NOT NULL,
+                unit TEXT NOT NULL,
+                amount REAL NOT NULL,
+                calories INTEGER NOT NULL,
+                fat_grams REAL NOT NULL,
+                carbs_grams REAL NOT NULL,
+                protein_grams REAL NOT NULL,
+                sugar_grams REAL NOT NULL,
+                created_at TEXT NOT NULL)",
         (),
     )
     .unwrap();
@@ -51,6 +65,15 @@ async fn main() {
         .route("/weight", get(weight::list).post(weight::create))
         .route("/weight/{id}", delete(weight::delete))
         .route("/tdee", get(tdee::get))
+        .route("/quickadd", get(quickadd::list).post(quickadd::create))
+        .route(
+            "/quickadd/{id}",
+            put(quickadd::update).delete(quickadd::delete),
+        )
+        .route(
+            "/quickadd/{id}/consume",
+            axum::routing::post(quickadd::consume),
+        )
         .route("/seed", get(admin::seed))
         .layer(cors_layer)
         .with_state(arccon);

@@ -240,3 +240,155 @@ pub mod admin {
         sd(state);
     }
 }
+
+pub mod quickadd {
+    use crate::{Db, dal::quickadd::QuickAddFood};
+    use axum::{
+        Json,
+        extract::{Path, State},
+        http::StatusCode,
+        response::IntoResponse,
+    };
+    use chrono::prelude::*;
+    use serde::Deserialize;
+
+    #[derive(Debug, Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    pub struct CreateQuickAddFoodRequest {
+        name: String,
+        unit: String,
+        amount: f64,
+        calories: i32,
+        fat_grams: f64,
+        carbs_grams: f64,
+        protein_grams: f64,
+        sugar_grams: f64,
+    }
+
+    #[derive(Debug, Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    pub struct UpdateQuickAddFoodRequest {
+        name: String,
+        unit: String,
+        amount: f64,
+        calories: i32,
+        fat_grams: f64,
+        carbs_grams: f64,
+        protein_grams: f64,
+        sugar_grams: f64,
+    }
+
+    #[derive(Debug, Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    pub struct ConsumeRequest {
+        multiplier: i32,
+    }
+
+    #[axum::debug_handler]
+    pub async fn list(State(db): State<Db>) -> impl IntoResponse {
+        let conn = db.lock().unwrap();
+
+        let mut stmt = conn
+            .prepare(
+                "SELECT id, name, unit, amount, calories, fat_grams, carbs_grams, protein_grams, sugar_grams, created_at FROM quickaddfoods ORDER BY name ASC",
+            )
+            .unwrap();
+
+        let results = stmt
+            .query_map([], |row| {
+                Ok(QuickAddFood {
+                    id: row.get(0).unwrap(),
+                    name: row.get(1).unwrap(),
+                    unit: row.get(2).unwrap(),
+                    amount: row.get(3).unwrap(),
+                    calories: row.get(4).unwrap(),
+                    fat_grams: row.get(5).unwrap(),
+                    carbs_grams: row.get(6).unwrap(),
+                    protein_grams: row.get(7).unwrap(),
+                    sugar_grams: row.get(8).unwrap(),
+                    created_at: row.get(9).unwrap(),
+                })
+            })
+            .unwrap();
+
+        let entries = results.map(|result| result.unwrap());
+
+        Json(entries.collect::<Vec<QuickAddFood>>())
+    }
+
+    #[axum::debug_handler]
+    pub async fn create(
+        State(db): State<Db>,
+        Json(input): Json<CreateQuickAddFoodRequest>,
+    ) -> impl IntoResponse {
+        let conn = db.lock().unwrap();
+
+        let now_local = Local::now();
+        let formatted = format!("{}", now_local.format("%Y-%m-%d %H:%M:%S"));
+        conn.execute(
+            "INSERT INTO quickaddfoods (name, unit, amount, calories, fat_grams, carbs_grams, protein_grams, sugar_grams, created_at) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+            (&input.name, &input.unit, input.amount, input.calories, input.fat_grams, input.carbs_grams, input.protein_grams, input.sugar_grams, &formatted),
+        )
+        .unwrap();
+
+        StatusCode::CREATED
+    }
+
+    #[axum::debug_handler]
+    pub async fn update(
+        State(db): State<Db>,
+        Path(id): Path<i64>,
+        Json(input): Json<UpdateQuickAddFoodRequest>,
+    ) -> impl IntoResponse {
+        let conn = db.lock().unwrap();
+
+        conn.execute(
+            "UPDATE quickaddfoods SET name = ?1, unit = ?2, amount = ?3, calories = ?4, fat_grams = ?5, carbs_grams = ?6, protein_grams = ?7, sugar_grams = ?8 WHERE id = ?9",
+            (&input.name, &input.unit, input.amount, input.calories, input.fat_grams, input.carbs_grams, input.protein_grams, input.sugar_grams, id),
+        )
+        .unwrap();
+
+        StatusCode::OK
+    }
+
+    #[axum::debug_handler]
+    pub async fn delete(State(db): State<Db>, Path(id): Path<i64>) -> impl IntoResponse {
+        let conn = db.lock().unwrap();
+
+        conn.execute("DELETE FROM quickaddfoods WHERE id = ?1", [id])
+            .unwrap();
+
+        StatusCode::OK
+    }
+
+    #[axum::debug_handler]
+    pub async fn consume(
+        State(db): State<Db>,
+        Path(id): Path<i64>,
+        Json(input): Json<ConsumeRequest>,
+    ) -> impl IntoResponse {
+        let conn = db.lock().unwrap();
+
+        // Get the food's calories
+        let calories: i32 = conn
+            .query_row(
+                "SELECT calories FROM quickaddfoods WHERE id = ?1",
+                [id],
+                |row| row.get(0),
+            )
+            .unwrap();
+
+        // Calculate total calories and create calorie entry
+        let total_calories = calories * input.multiplier;
+        let now_local = Local::now();
+        let formatted = format!("{}", now_local.format("%Y-%m-%d %H:%M:%S"));
+
+        conn.execute(
+            "INSERT INTO calorieentries (amount, created_at) VALUES (?1, ?2)",
+            (total_calories, &formatted),
+        )
+        .unwrap();
+
+        StatusCode::CREATED
+    }
+}
