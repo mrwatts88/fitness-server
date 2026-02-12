@@ -154,6 +154,7 @@ pub mod tdee {
     struct Tdee {
         amount: i32,
         loss_in_2_weeks: f64,
+        eaten_per_day: f64,
     }
     #[axum::debug_handler]
     pub async fn get(state: State<Db>) -> impl IntoResponse {
@@ -176,8 +177,10 @@ pub mod tdee {
 
         let c_sum: i32 = c_entries.iter().map(|e| e.amount).sum();
         let food_cals_burned = c_sum / 2;
+        let eaten_per_day = c_sum as f64 / 28.0;
         println!("c_sum: {c_sum}");
         println!("food_cals_burned: {food_cals_burned}");
+        println!("eaten_per_day: {eaten_per_day}");
 
         // 2. get [T-13, T-0] records for weightentries, 14 days of weights, W2
         let w2_entries = weight::get_by_date_range(
@@ -226,6 +229,7 @@ pub mod tdee {
         Json(Tdee {
             amount: total_cals_burned / 14,
             loss_in_2_weeks: loss,
+            eaten_per_day,
         })
     }
 }
